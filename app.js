@@ -1,6 +1,6 @@
-// ====== サーバーURL（ご指定の Render ）======
+// ====== サーバーURL（Render）======
 const BACKEND_URL = "https://kokoro-server.onrender.com";
-// ============================================
+// ==================================
 
 const qs = new URLSearchParams(location.search);
 const roomId = qs.get("room") || "";
@@ -28,7 +28,7 @@ let latestAnswers = []; // [{nickname, answer}]
 let answerProgress = { done: 0, total: 0 };
 let topicProgress = { done: 0, total: 0 };
 let currentMode = "sequential"; // 'sequential' | 'all'
-let myLikes = {}; // index: boolean (簡易クライアント側状態)
+let myLikes = {}; // index: boolean（クライアント側のトグル状態）
 
 /* ===== 共有リンク（ヘッダー） ===== */
 copyLinkBtn?.addEventListener("click", async () => {
@@ -217,8 +217,7 @@ function renderAnswer(topic) {
 }
 
 /* ===== 発表（順番）：スロット演出 → 1人分を表示 ===== */
-function renderRevealWithSlot(nextAns, onDone) {
-  // スロットに回す候補（参加者名）
+function renderRevealWithSlot(nextIndex) {
   const options = latestAnswers.map(a => a.nickname);
   let tick = 0;
   const duration = 1400; // ms
@@ -242,8 +241,7 @@ function renderRevealWithSlot(nextAns, onDone) {
 
   const end = () => {
     clearInterval(timer);
-    renderRevealOne(nextAns);
-    onDone && onDone();
+    renderRevealOne(latestAnswers[nextIndex], nextIndex);
   };
 
   const timeout = setTimeout(end, duration);
@@ -255,7 +253,6 @@ function renderRevealWithSlot(nextAns, onDone) {
 
 /* ===== 発表（順番）：1人分の表示＋👍 ===== */
 function renderRevealOne(ans, indexInRound) {
-  // indexInRound は latestAnswers 内の並びindex（サーバー側もこのindexでいいね集計）
   const remain = `${revealIndex + 1} / ${latestAnswers.length}`;
   const liked = !!myLikes[indexInRound];
   const html = `
@@ -286,8 +283,7 @@ function renderRevealOne(ans, indexInRound) {
   document.getElementById("revealNextBtn").addEventListener("click", () => {
     if (revealIndex < latestAnswers.length - 1) {
       revealIndex++;
-      // 次の人をスロット演出してから表示
-      renderRevealWithSlot(latestAnswers[revealIndex], null);
+      renderRevealWithSlot(revealIndex);
     } else {
       if (!isHost) renderWaitingNext();
       else renderHostNextHint();
@@ -354,6 +350,7 @@ function renderHostNextHint() {
       <p class="small">「次のお題へ」を押して続けましょう</p>
     </div>
   `;
+  if (isHost) nextTopicBtn.disabled = false; // ★追加：発表完了後も次へ押せる
 }
 
 /* ===== スコア表示 ===== */
@@ -396,25 +393,27 @@ function connectAndJoin() {
   socket.on("answerProgress", ({ done, total }) => {
     answerProgress = { done, total };
     answerProgText.textContent = `${done}/${total}`;
+    // 全員回答完了まで「次のお題へ」は無効（ラウンド中）
     if (isHost) nextTopicBtn.disabled = !(done === total && total > 0);
   });
 
+  // ★変更点：開始直後から最初の出題のために「次のお題へ」を押せる
   socket.on("gameStarted", ({ mode }) => {
     currentMode = mode || currentMode;
     startBtn.disabled = true;
     nextTopicBtn.classList.toggle("hidden", !isHost);
-    if (isHost) nextTopicBtn.disabled = true;
+    if (isHost) nextTopicBtn.disabled = false; // ←ここを有効化
     renderWaitingNext();
   });
 
   socket.on("newTopic", (topic) => {
     currentTopic = topic;
-    myLikes = {}; // ラウンドごとにリセット（クライアント側のメモ）
+    myLikes = {}; // ラウンドごとにリセット
+    // 新しいお題が出たら、回答が揃うまで「次へ」は再び無効
     if (isHost) nextTopicBtn.disabled = true;
     renderAnswer(topic);
   });
 
-  // 発表：サーバーから回答一覧とモードが届く
   socket.on("showAnswers", ({ answers, mode }) => {
     latestAnswers = answers.slice();
     currentMode = mode;
@@ -423,13 +422,11 @@ function connectAndJoin() {
     if (currentMode === "all") {
       renderRevealAll();
     } else {
-      // 最初の人はスロット演出してから
-      renderRevealWithSlot(latestAnswers[revealIndex], null);
+      renderRevealWithSlot(revealIndex);
     }
   });
 
   socket.on("likesUpdate", ({ counts }) => {
-    // counts: { index: numberLike }
     Object.entries(counts || {}).forEach(([idx, c]) => {
       const el = document.getElementById(`likeCount-${idx}`);
       if (el) el.textContent = c;
@@ -472,7 +469,6 @@ function connectAndJoin() {
   isHost = !!hostFlag;
   setHostUI();
 
-  // トップ（参加＆ルールへ）
   renderTop();
 
   // ホスト操作
