@@ -1,8 +1,11 @@
-const BACKEND_URL = "https://kokoro-server.onrender.com";
-// =======================================================
+// ====== ★ここをあなたの Render サーバーURLに変更！★ ======
+const BACKEND_URL = "https://kokoro-server.onrender.com/";
+// 例: const BACKEND_URL = "https://kokoro-server.onrender.com";
+// ===========================================================
 
 const qs = new URLSearchParams(location.search);
 const roomId = qs.get("room") || "";
+
 const view = document.getElementById("view");
 const playersEl = document.getElementById("players");
 const topicsCountEl = document.getElementById("topicsCount");
@@ -13,14 +16,19 @@ const shareTools = document.getElementById("shareTools");
 const copyLinkBtn = document.getElementById("copyLinkBtn");
 const copyStatus = document.getElementById("copyStatus");
 
+const topicProgText = document.getElementById("topicProgressText");
+const answerProgText = document.getElementById("answerProgressText");
+
 let socket = null;
 let nickname = localStorage.getItem("kokoro_nickname") || "";
-let isHost = false; // 部屋作成者のみ true
+let isHost = false;
 let currentTopic = "";
 let revealIndex = 0;
 let latestAnswers = [];
+let answerProgress = { done: 0, total: 0 };
+let topicProgress = { done: 0, total: 0 };
 
-// 共有リンクUI
+// 共有リンクUI（ヘッダー）
 copyLinkBtn?.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(location.href);
@@ -35,7 +43,23 @@ function setHostUI() {
   document.querySelectorAll(".host-only").forEach(el => {
     el.classList.toggle("hidden", !isHost);
   });
+  // ボタン初期制御
+  startBtn.disabled = !(topicProgress.done === topicProgress.total && topicProgress.total > 0);
+  nextTopicBtn.disabled = true;
 }
+
+function makeRoomId() {
+  const s = "abcdefghjkmnpqrstuvwxyz23456789";
+  let id = "";
+  for (let i = 0; i < 6; i++) id += s[Math.floor(Math.random() * s.length)];
+  return id;
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+/* ========== 画面 ========== */
 
 function renderTop() {
   const html = `
@@ -44,7 +68,7 @@ function renderTop() {
       <h2 class="big">「心を合わせて」へ</h2>
 
       <div class="row" style="margin-bottom:12px;">
-        <input id="nicknameInput" type="text" placeholder="ニックネームを入力" value="${nickname || ""}" />
+        <input id="nicknameInput" type="text" placeholder="ニックネームを入力" value="${escapeHtml(nickname)}" />
         ${roomId ? "" : `<button id="createRoomBtn">部屋を作る</button>`}
       </div>
 
@@ -54,15 +78,24 @@ function renderTop() {
           : `<div class="small">「部屋を作る」でURLを発行 → みんなに共有してください</div>`
       }
 
+      ${ roomId ? `
+        <div class="card" style="margin-top:12px;">
+          <div class="row">
+            <input id="inviteInput" type="text" readonly value="${location.href}" />
+            <button id="copyLinkLocalBtn">招待リンクをコピー</button>
+          </div>
+          <p class="small">コピーできない場合は長押しで選択→コピーしてください。</p>
+        </div>
+      ` : "" }
+
       <div style="height:12px"></div>
       <div class="card">
         <h3>ルール</h3>
         <ol>
-          <li>各自、好きなだけ「お題」を追加します。</li>
-          <li>ホストが「ゲーム開始」。</li>
-          <li>「次のお題へ」でランダムにお題が出題され、全員がテキスト回答。</li>
-          <li>発表フェーズで、ニックネーム付きで一人ずつ回答を表示。</li>
-          <li>盛り上がったら次のお題へ！</li>
+          <li>各自、好きなだけ「お題」を追加</li>
+          <li>ホストが「ゲーム開始」</li>
+          <li>「次のお題へ」でランダム出題 → 全員がテキスト回答</li>
+          <li>発表フェーズ：ニックネーム付きで1人ずつ表示</li>
         </ol>
         <button id="goRulesBtn" ${roomId ? "" : "disabled"}>ルールOK！お題入力へ</button>
       </div>
@@ -88,6 +121,19 @@ function renderTop() {
     connectAndJoin();
     renderRules();
   });
+
+  // 本文側コピーのフォールバック
+  document.getElementById("copyLinkLocalBtn")?.addEventListener("click", async () => {
+    const el = document.getElementById("inviteInput");
+    el.select();
+    try {
+      await navigator.clipboard.writeText(el.value);
+      alert("招待リンクをコピーしました！");
+    } catch {
+      document.execCommand?.("copy");
+      alert("コピーできました（フォールバック）");
+    }
+  });
 }
 
 function renderRules() {
@@ -96,10 +142,10 @@ function renderRules() {
       <h2 class="big">ルール説明</h2>
       <p>これから「お題募集」→「回答」→「発表」をくり返して遊びます。</p>
       <ul>
-        <li>お題は各自いくつでも追加OK</li>
-        <li>ホストが進行（ゲーム開始/次のお題へ）</li>
+        <li>お題はいくつでも追加OK</li>
+        <li>ホストが進行（開始/次のお題へ）</li>
         <li>回答はテキストで送信</li>
-        <li>発表はニックネーム順で一人ずつ表示</li>
+        <li>発表はニックネーム順に1人ずつ表示</li>
       </ul>
       <div class="row">
         <button id="toTopicsBtn">お題入力へ進む</button>
@@ -108,6 +154,15 @@ function renderRules() {
   `;
   view.innerHTML = html;
   document.getElementById("toTopicsBtn").addEventListener("click", renderTopicEntry);
+}
+
+function addTopicPill(text) {
+  const list = document.getElementById("topicList");
+  if (!list) return;
+  const span = document.createElement("span");
+  span.className = "topic-pill";
+  span.textContent = text;
+  list.appendChild(span);
 }
 
 function renderTopicEntry() {
@@ -121,6 +176,9 @@ function renderTopicEntry() {
       <p class="small">※ お題はいくつでも追加できます</p>
       <div id="topicList" style="margin-top:8px;"></div>
       <div style="height:8px"></div>
+      <div class="row">
+        <button id="markTopicReadyBtn">お題入力は完了しました</button>
+      </div>
       <p class="small">ホストは、全員の入力が済んだら「ゲーム開始」を押してください。</p>
     </div>
   `;
@@ -134,6 +192,11 @@ function renderTopicEntry() {
     addTopicPill(t);
     input.value = "";
     input.focus();
+  });
+
+  document.getElementById("markTopicReadyBtn").addEventListener("click", () => {
+    socket.emit("markTopicReady", { roomId });
+    document.getElementById("markTopicReadyBtn").disabled = true;
   });
 }
 
@@ -181,9 +244,7 @@ function renderRevealOne() {
       revealIndex++;
       renderRevealOne();
     } else {
-      // 発表終わり → ホストが「次のお題へ」
       if (!isHost) {
-        // 参加者は待機表示
         renderWaitingNext();
       } else {
         renderHostNextHint();
@@ -212,16 +273,7 @@ function renderHostNextHint() {
   view.innerHTML = html;
 }
 
-function addTopicPill(text) {
-  const list = document.getElementById("topicList");
-  if (!list) return;
-  const span = document.createElement("span");
-  span.className = "topic-pill";
-  span.textContent = text;
-  list.appendChild(span);
-}
-
-// ===== Socket & lifecycle =====
+/* ========== Socket接続 ========== */
 
 function connectAndJoin() {
   if (socket && socket.connected) return;
@@ -234,25 +286,48 @@ function connectAndJoin() {
 
   socket.on("playersUpdate", (players) => {
     playersEl.innerHTML = players.map(p => `<li>${escapeHtml(p.nickname)}</li>`).join("");
+    topicProgress.total = players.length;
+    answerProgress.total = players.length;
+    if (topicProgText) topicProgText.textContent = `${topicProgress.done}/${topicProgress.total}`;
+    if (answerProgText) answerProgText.textContent = `${answerProgress.done}/${answerProgress.total}`;
+    setHostUI();
   });
 
   socket.on("topicsUpdate", (count) => {
     topicsCountEl.textContent = count;
   });
 
+  socket.on("topicProgress", ({ done, total }) => {
+    topicProgress = { done, total };
+    if (topicProgText) topicProgText.textContent = `${done}/${total}`;
+    // 全員準備完了でホストの開始ボタンが有効に
+    if (isHost) startBtn.disabled = !(done === total && total > 0);
+  });
+
+  socket.on("answerProgress", ({ done, total }) => {
+    answerProgress = { done, total };
+    if (answerProgText) answerProgText.textContent = `${done}/${total}`;
+    // 全員回答完了まで「次のお題へ」は無効
+    if (isHost) nextTopicBtn.disabled = !(done === total && total > 0);
+  });
+
   socket.on("gameStarted", () => {
     startBtn.disabled = true;
     nextTopicBtn.classList.toggle("hidden", !isHost);
+    // 回答が揃うまで次へは押せない
+    if (isHost) nextTopicBtn.disabled = true;
     renderWaitingNext();
   });
 
   socket.on("newTopic", (topic) => {
     currentTopic = topic;
+    // 新しいお題では回答進捗を0に戻すので、ホストの「次へ」は再び無効
+    if (isHost) nextTopicBtn.disabled = true;
     renderAnswer(topic);
   });
 
   socket.on("showAnswers", (answers) => {
-    latestAnswers = answers.slice(); // [{nickname, answer}]
+    latestAnswers = answers.slice();
     revealIndex = 0;
     renderRevealOne();
   });
@@ -267,23 +342,11 @@ function connectAndJoin() {
   });
 }
 
-// ===== Helpers =====
-
-function makeRoomId() {
-  const s = "abcdefghjkmnpqrstuvwxyz23456789";
-  let id = "";
-  for (let i = 0; i < 6; i++) id += s[Math.floor(Math.random() * s.length)];
-  return id;
-}
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
-}
-
-// ===== Boot =====
+/* ========== 起動 ========== */
 
 (function init() {
   const isRoom = !!roomId;
+
   if (!isRoom) {
     shareTools.classList.add("hidden");
     roomInfoEl.textContent = "部屋未作成";
@@ -299,7 +362,7 @@ function escapeHtml(s) {
   isHost = !!hostFlag;
   setHostUI();
 
-  // トップ画面（参加＆ルールOKへ）
+  // トップ（参加＆ルールへ）
   renderTop();
 
   // ホスト操作ボタン
