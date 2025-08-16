@@ -1,78 +1,61 @@
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; background:#f7f7fb; color:#222; }
-.app { display:grid; grid-template-columns: 1fr 280px; grid-template-rows: auto 1fr; min-height:100vh; }
-header { grid-column: 1 / -1; padding:16px 20px; background:#fff; border-bottom:1px solid #eee; display:flex; gap:20px; align-items:center; }
-h1 { margin:0; font-size:20px; }
-#roomInfo { color:#666; }
-.share-tools { display:flex; align-items:center; gap:10px; margin-left:auto; }
-.hidden { display:none !important; }
+:root {
+  --bg: #f7f7fb;
+  --card: #fff;
+  --line: #eee;
+  --text: #222;
+  --muted: #666;
+  --primary: #3b82f6;
+  --pill: #eef2ff;
+}
 
-main { padding:24px; }
-aside { padding:16px; border-left:1px solid #eee; background:#fafafa; display:flex; flex-direction:column; gap:16px; }
-.panel { background:#fff; border:1px solid #eee; border-radius:12px; padding:12px; }
-#players { list-style:none; padding:0; margin:0; }
-#players li { padding:4px 0; border-bottom:1px dotted #eee; }
-#players li:last-child { border-bottom:none; }
+html, body { height: 100%; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; background: var(--bg); color: var(--text); }
 
-.card { background:#fff; border:1px solid #eee; border-radius:16px; padding:20px; max-width:720px; box-shadow:0 1px 6px rgba(0,0,0,0.04); }
-.row { display:flex; gap:8px; align-items:center; }
-input[type="text"], textarea { width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:10px; font-size:16px; }
-button { padding:10px 14px; border:none; border-radius:10px; background:#3b82f6; color:#fff; cursor:pointer; }
-button:disabled { opacity:.5; cursor:not-allowed; }
-.small { font-size:12px; color:#777; }
-.topic-pill { display:inline-block; padding:6px 10px; background:#eef2ff; border-radius:999px; margin:4px 6px 0 0; }
-.center { text-align:center; }
-.kicker { color:#6b7280; margin:0 0 8px; }
-.big { font-size:24px; margin:8px 0 16px; }
+.app { display: grid; grid-template-columns: 1fr 300px; grid-template-rows: auto 1fr; min-height: 100vh; }
+header { grid-column: 1 / -1; padding: 16px 20px; background: #fff; border-bottom: 1px solid var(--line); display: flex; gap: 16px; align-items: center; }
+h1 { margin: 0; font-size: 20px; }
+.room-info { color: var(--muted); }
+.share-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.hidden { display: none !important; }
 
-/* ===== モバイル最適化（～720px）===== */
+main { padding: 24px; }
+aside { padding: 16px; border-left: 1px solid var(--line); background: #fafafa; display: flex; flex-direction: column; gap: 16px; }
+
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
+#players { list-style: none; padding: 0; margin: 0; }
+#players li { padding: 4px 0; border-bottom: 1px dotted var(--line); }
+#players li:last-child { border-bottom: none; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; max-width: 900px; box-shadow: 0 1px 6px rgba(0,0,0,0.04); }
+.row { display: flex; gap: 8px; align-items: center; }
+input[type="text"], textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; }
+button { padding: 10px 14px; border: none; border-radius: 10px; background: var(--primary); color: #fff; cursor: pointer; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.small { font-size: 12px; color: #777; }
+.kicker { color: #6b7280; margin: 0 0 8px; }
+.big { font-size: 24px; margin: 8px 0 16px; }
+.big-num { font-size: 28px; font-weight: 700; }
+
+.topic-pill { display: inline-block; padding: 6px 10px; background: var(--pill); border-radius: 999px; margin: 6px 6px 0 0; }
+.center { text-align: center; }
+
+/* ルールリスト */
+ol, ul { padding-left: 22px; }
+ol li, ul li { margin: 6px 0; line-height: 1.6; }
+
+/* モバイル最適化 */
 @media (max-width: 720px) {
-  .app {
-    grid-template-columns: 1fr;           /* 1カラムに */
-    grid-template-rows: auto 1fr; 
-  }
-  header { padding: 12px 14px; gap: 12px; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  header { padding: 12px 14px; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 18px; }
-
   main { padding: 16px; }
-  aside {
-    border-left: none;                    /* サイドの縦線を消す */
-    border-top: 1px solid #eee;           /* 上に薄い線 */
-    padding: 12px 16px;
-    gap: 12px;
-  }
-
-  .card {
-    padding: 16px;                        /* 余白を少し詰める */
-    border-radius: 12px;
-    max-width: 100%;
-  }
-
-  .big { font-size: 20px; }               /* 見出しを少し小さく */
+  aside { border-left: none; border-top: 1px solid var(--line); padding: 12px 16px; gap: 12px; }
+  .card { padding: 16px; border-radius: 12px; max-width: 100%; }
+  .big { font-size: 20px; }
   .kicker { font-size: 12px; }
-
-  .row {                                  /* 入力欄＋ボタンを縦積み */
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
+  .row { flex-direction: column; align-items: stretch; gap: 10px; }
   .row > * { width: 100%; }
-
-  input[type="text"], textarea {
-    font-size: 16px;                      /* ズーム防止 */
-    padding: 10px 12px;
-  }
   button { padding: 12px; font-size: 16px; }
-
-  ol, ul {                                /* ルールの箇条書きを詰め気味に */
-    padding-left: 18px;
-  }
-  ol li, ul li {
-    margin: 6px 0; 
-    line-height: 1.5;
-  }
-
-  .topic-pill { margin: 6px 6px 0 0; }
-
-
+  .share-tools { display: flex !important; gap: 8px; margin-left: 0; width: 100%; justify-content: flex-end; }
 }
