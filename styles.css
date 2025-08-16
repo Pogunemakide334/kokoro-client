@@ -136,4 +136,16 @@ ol li, ul li { margin: 6px 0; line-height: 1.6; }
 
 /* モバイル最適化 */
 @media (max-width: 720px) {
-  .app { grid-templa
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  header { padding: 12px 14px; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 18px; }
+  main { padding: 16px; }
+  aside { border-left: none; border-top: 1px solid var(--line); padding: 12px 16px; gap: 12px; }
+  .card { padding: 16px; border-radius: 12px; max-width: 100%; }
+  .big { font-size: 20px; }
+  .kicker { font-size: 12px; }
+  .row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .row > * { width: 100%; }
+  button { padding: 12px; font-size: 16px; }
+  .share-tools { display: flex !important; gap: 8px; margin-left: 0; width: 100%; justify-content: flex-end; }
+}
