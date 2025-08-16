@@ -19,9 +19,7 @@
       </div>
     </header>
 
-    <main id="view">
-      <!-- ここにJSで画面が差し替わります -->
-    </main>
+    <main id="view"><!-- JSで差し替え --></main>
 
     <aside>
       <div class="panel">
@@ -42,12 +40,6 @@
 
       <div class="panel">
         <h3>ホスト操作</h3>
-        <button id="startBtn" class="host-only hidden" disabled>お題募集終了（ゲーム開始）</button>
-        <button id="nextTopicBtn" class="host-only hidden" disabled>次のお題へ</button>
-      </div>
-    </aside>
-  </div>
-
-  <script src="./app.js"></script>
-</body>
-</html>
+        <div class="small">発表モード</div>
+        <select id="revealModeSelect" class="host-only hidden">
+          <option value="sequentia
