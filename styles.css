@@ -111,7 +111,7 @@ ol li, ul li { margin: 6px 0; line-height: 1.6; }
 }
 .like-count { font-weight:700; }
 
-/* 全員同時モードのカード配置 */
+/* 全員同時モード／一覧のカード配置 */
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
