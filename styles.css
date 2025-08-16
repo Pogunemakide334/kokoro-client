@@ -24,3 +24,56 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .center { text-align:center; }
 .kicker { color:#6b7280; margin:0 0 8px; }
 .big { font-size:24px; margin:8px 0 16px; }
+
+/* ===== モバイル最適化（～720px）===== */
+@media (max-width: 720px) {
+  .app {
+    grid-template-columns: 1fr;           /* 1カラムに */
+    grid-template-rows: auto 1fr; 
+  }
+  header { padding: 12px 14px; gap: 12px; }
+  h1 { font-size: 18px; }
+
+  main { padding: 16px; }
+  aside {
+    border-left: none;                    /* サイドの縦線を消す */
+    border-top: 1px solid #eee;           /* 上に薄い線 */
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .card {
+    padding: 16px;                        /* 余白を少し詰める */
+    border-radius: 12px;
+    max-width: 100%;
+  }
+
+  .big { font-size: 20px; }               /* 見出しを少し小さく */
+  .kicker { font-size: 12px; }
+
+  .row {                                  /* 入力欄＋ボタンを縦積み */
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .row > * { width: 100%; }
+
+  input[type="text"], textarea {
+    font-size: 16px;                      /* ズーム防止 */
+    padding: 10px 12px;
+  }
+  button { padding: 12px; font-size: 16px; }
+
+  ol, ul {                                /* ルールの箇条書きを詰め気味に */
+    padding-left: 18px;
+  }
+  ol li, ul li {
+    margin: 6px 0; 
+    line-height: 1.5;
+  }
+
+  .topic-pill { margin: 6px 6px 0 0; }
+
+  /* 共有UIが窮屈なら折りたたむ */
+  .share-tools { display: none; }
+}
