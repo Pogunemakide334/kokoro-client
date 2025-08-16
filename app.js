@@ -1,5 +1,5 @@
 // ====== ★ここをあなたの Render サーバーURLに変更！★ ======
-const BACKEND_URL = "https://kokoro-server.onrender.com/";
+const BACKEND_URL = "https://kokoro-server.onrender.com";
 // 例: const BACKEND_URL = "https://kokoro-server.onrender.com";
 // ===========================================================
 
