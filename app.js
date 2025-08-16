@@ -1,7 +1,6 @@
-// ====== ★ここをあなたの Render サーバーURLに変更！★ ======
+// ====== サーバーURL（ご指定の Render ）======
 const BACKEND_URL = "https://kokoro-server.onrender.com";
-// 例: const BACKEND_URL = "https://kokoro-server.onrender.com";
-// ===========================================================
+// ============================================
 
 const qs = new URLSearchParams(location.search);
 const roomId = qs.get("room") || "";
@@ -15,20 +14,23 @@ const nextTopicBtn = document.getElementById("nextTopicBtn");
 const shareTools = document.getElementById("shareTools");
 const copyLinkBtn = document.getElementById("copyLinkBtn");
 const copyStatus = document.getElementById("copyStatus");
-
 const topicProgText = document.getElementById("topicProgressText");
 const answerProgText = document.getElementById("answerProgressText");
+const scoreboardEl = document.getElementById("scoreboard");
+const revealModeSelect = document.getElementById("revealModeSelect");
 
 let socket = null;
 let nickname = localStorage.getItem("kokoro_nickname") || "";
 let isHost = false;
 let currentTopic = "";
 let revealIndex = 0;
-let latestAnswers = [];
+let latestAnswers = []; // [{nickname, answer}]
 let answerProgress = { done: 0, total: 0 };
 let topicProgress = { done: 0, total: 0 };
+let currentMode = "sequential"; // 'sequential' | 'all'
+let myLikes = {}; // index: boolean (簡易クライアント側状態)
 
-// 共有リンクUI（ヘッダー）
+/* ===== 共有リンク（ヘッダー） ===== */
 copyLinkBtn?.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(location.href);
@@ -43,9 +45,9 @@ function setHostUI() {
   document.querySelectorAll(".host-only").forEach(el => {
     el.classList.toggle("hidden", !isHost);
   });
-  // ボタン初期制御
   startBtn.disabled = !(topicProgress.done === topicProgress.total && topicProgress.total > 0);
   nextTopicBtn.disabled = true;
+  revealModeSelect.value = currentMode;
 }
 
 function makeRoomId() {
@@ -60,7 +62,6 @@ function escapeHtml(s) {
 }
 
 /* ========== 画面 ========== */
-
 function renderTop() {
   const html = `
     <div class="card">
@@ -72,11 +73,9 @@ function renderTop() {
         ${roomId ? "" : `<button id="createRoomBtn">部屋を作る</button>`}
       </div>
 
-      ${
-        roomId
-          ? `<div class="small">この部屋に参加します：<strong>${roomId}</strong></div>`
-          : `<div class="small">「部屋を作る」でURLを発行 → みんなに共有してください</div>`
-      }
+      ${ roomId
+        ? `<div class="small">この部屋に参加します：<strong>${roomId}</strong></div>`
+        : `<div class="small">「部屋を作る」でURLを発行 → みんなに共有してください</div>` }
 
       ${ roomId ? `
         <div class="card" style="margin-top:12px;">
@@ -95,7 +94,8 @@ function renderTop() {
           <li>各自、好きなだけ「お題」を追加</li>
           <li>ホストが「ゲーム開始」</li>
           <li>「次のお題へ」でランダム出題 → 全員がテキスト回答</li>
-          <li>発表フェーズ：ニックネーム付きで1人ずつ表示</li>
+          <li>発表は「順番」または「全員同時」モード</li>
+          <li>👍で投票、スコア加算</li>
         </ol>
         <button id="goRulesBtn" ${roomId ? "" : "disabled"}>ルールOK！お題入力へ</button>
       </div>
@@ -104,9 +104,7 @@ function renderTop() {
   view.innerHTML = html;
 
   const nicknameInput = document.getElementById("nicknameInput");
-  nicknameInput?.addEventListener("input", e => {
-    nickname = e.target.value.trim();
-  });
+  nicknameInput?.addEventListener("input", e => { nickname = e.target.value.trim(); });
 
   document.getElementById("createRoomBtn")?.addEventListener("click", () => {
     if (!nickname) { alert("ニックネームを入力してください"); return; }
@@ -122,17 +120,11 @@ function renderTop() {
     renderRules();
   });
 
-  // 本文側コピーのフォールバック
   document.getElementById("copyLinkLocalBtn")?.addEventListener("click", async () => {
     const el = document.getElementById("inviteInput");
     el.select();
-    try {
-      await navigator.clipboard.writeText(el.value);
-      alert("招待リンクをコピーしました！");
-    } catch {
-      document.execCommand?.("copy");
-      alert("コピーできました（フォールバック）");
-    }
+    try { await navigator.clipboard.writeText(el.value); alert("招待リンクをコピーしました！"); }
+    catch { document.execCommand?.("copy"); alert("コピーできました（フォールバック）"); }
   });
 }
 
@@ -140,12 +132,12 @@ function renderRules() {
   const html = `
     <div class="card">
       <h2 class="big">ルール説明</h2>
-      <p>これから「お題募集」→「回答」→「発表」をくり返して遊びます。</p>
+      <p>「お題募集」→「回答」→「発表」を繰り返します。</p>
       <ul>
-        <li>お題はいくつでも追加OK</li>
-        <li>ホストが進行（開始/次のお題へ）</li>
-        <li>回答はテキストで送信</li>
-        <li>発表はニックネーム順に1人ずつ表示</li>
+        <li>お題は無制限に追加OK</li>
+        <li>ホストが進行（開始/次のお題へ/発表モード切替）</li>
+        <li>回答は全員テキスト送信</li>
+        <li>発表は順番 or 全員同時。👍で投票、スコア加点</li>
       </ul>
       <div class="row">
         <button id="toTopicsBtn">お題入力へ進む</button>
@@ -224,57 +216,155 @@ function renderAnswer(topic) {
   });
 }
 
-function renderRevealOne() {
-  const ans = latestAnswers[revealIndex];
-  const remain = `${revealIndex + 1} / ${latestAnswers.length}`;
+/* ===== 発表（順番）：スロット演出 → 1人分を表示 ===== */
+function renderRevealWithSlot(nextAns, onDone) {
+  // スロットに回す候補（参加者名）
+  const options = latestAnswers.map(a => a.nickname);
+  let tick = 0;
+  const duration = 1400; // ms
+  const interval = 70;
+
   const html = `
     <div class="card center">
-      <p class="kicker">発表フェーズ</p>
+      <p class="kicker">発表フェーズ（順番）</p>
+      <div class="slot" id="slotBox">---</div>
+      <div style="height:10px"></div>
+      <button id="slotSkipBtn">スキップして表示</button>
+    </div>
+  `;
+  view.innerHTML = html;
+
+  const slotBox = document.getElementById("slotBox");
+  const timer = setInterval(() => {
+    slotBox.textContent = options[tick % options.length] || "---";
+    tick++;
+  }, interval);
+
+  const end = () => {
+    clearInterval(timer);
+    renderRevealOne(nextAns);
+    onDone && onDone();
+  };
+
+  const timeout = setTimeout(end, duration);
+  document.getElementById("slotSkipBtn").addEventListener("click", () => {
+    clearTimeout(timeout);
+    end();
+  });
+}
+
+/* ===== 発表（順番）：1人分の表示＋👍 ===== */
+function renderRevealOne(ans, indexInRound) {
+  // indexInRound は latestAnswers 内の並びindex（サーバー側もこのindexでいいね集計）
+  const remain = `${revealIndex + 1} / ${latestAnswers.length}`;
+  const liked = !!myLikes[indexInRound];
+  const html = `
+    <div class="card center">
+      <p class="kicker">発表フェーズ（順番）</p>
       <h2 class="big">${escapeHtml(ans.nickname)}</h2>
       <div style="font-size:22px; margin:8px 0 16px;">${escapeHtml(ans.answer)}</div>
       <div class="small">(${remain})</div>
+
+      <div class="like-row">
+        <button class="like-btn" id="likeBtn">${liked ? "👍 取り消す" : "👍 いいね"}</button>
+        <span class="like-count">Likes: <span id="likeCount">0</span></span>
+      </div>
+
       <div style="height:8px"></div>
       <button id="revealNextBtn">${revealIndex < latestAnswers.length - 1 ? "次へ" : "発表を閉じる"}</button>
     </div>
   `;
   view.innerHTML = html;
 
+  document.getElementById("likeBtn").addEventListener("click", () => {
+    const on = !myLikes[indexInRound];
+    socket.emit("likeAnswer", { roomId, index: indexInRound, on });
+    myLikes[indexInRound] = on;
+    document.getElementById("likeBtn").textContent = on ? "👍 取り消す" : "👍 いいね";
+  });
+
   document.getElementById("revealNextBtn").addEventListener("click", () => {
     if (revealIndex < latestAnswers.length - 1) {
       revealIndex++;
-      renderRevealOne();
+      // 次の人をスロット演出してから表示
+      renderRevealWithSlot(latestAnswers[revealIndex], null);
     } else {
-      if (!isHost) {
-        renderWaitingNext();
-      } else {
-        renderHostNextHint();
-      }
+      if (!isHost) renderWaitingNext();
+      else renderHostNextHint();
     }
   });
 }
 
-function renderWaitingNext() {
+/* ===== 発表（全員同時）：一覧表示＋各カードに👍 ===== */
+function renderRevealAll() {
+  const cards = latestAnswers
+    .map((a, i) => `
+      <div class="card">
+        <p class="kicker">${escapeHtml(a.nickname)}</p>
+        <div style="font-size:18px; margin:6px 0 10px;">${escapeHtml(a.answer)}</div>
+        <div class="like-row">
+          <button class="like-btn" data-idx="${i}">👍 いいね</button>
+          <span class="like-count">Likes: <span id="likeCount-${i}">0</span></span>
+        </div>
+      </div>
+    `).join("");
+
   const html = `
+    <div class="card">
+      <p class="kicker">発表フェーズ（全員同時）</p>
+      <div class="grid">
+        ${cards}
+      </div>
+      <div style="height:12px"></div>
+      <div class="center">
+        <button id="closeRevealBtn">発表を閉じる</button>
+      </div>
+    </div>
+  `;
+  view.innerHTML = html;
+
+  document.querySelectorAll(".like-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const idx = Number(e.currentTarget.getAttribute("data-idx"));
+      const on = !myLikes[idx];
+      socket.emit("likeAnswer", { roomId, index: idx, on });
+      myLikes[idx] = on;
+      e.currentTarget.textContent = on ? "👍 取り消す" : "👍 いいね";
+    });
+  });
+
+  document.getElementById("closeRevealBtn").addEventListener("click", () => {
+    if (!isHost) renderWaitingNext(); else renderHostNextHint();
+  });
+}
+
+function renderWaitingNext() {
+  view.innerHTML = `
     <div class="card center">
       <h2 class="big">次のお題を待っています…</h2>
       <p class="small">ホストが「次のお題へ」を押すと表示されます</p>
     </div>
   `;
-  view.innerHTML = html;
 }
 
 function renderHostNextHint() {
-  const html = `
+  view.innerHTML = `
     <div class="card center">
       <h2 class="big">みんなの発表が終わりました！</h2>
       <p class="small">「次のお題へ」を押して続けましょう</p>
     </div>
   `;
-  view.innerHTML = html;
+}
+
+/* ===== スコア表示 ===== */
+function renderScores(scores) {
+  const arr = Object.entries(scores || {}).sort((a,b) => b[1]-a[1]);
+  scoreboardEl.innerHTML = arr.map(([name, pt]) =>
+    `<li><span>${escapeHtml(name)}</span><span>${pt}</span></li>`
+  ).join("");
 }
 
 /* ========== Socket接続 ========== */
-
 function connectAndJoin() {
   if (socket && socket.connected) return;
 
@@ -288,8 +378,8 @@ function connectAndJoin() {
     playersEl.innerHTML = players.map(p => `<li>${escapeHtml(p.nickname)}</li>`).join("");
     topicProgress.total = players.length;
     answerProgress.total = players.length;
-    if (topicProgText) topicProgText.textContent = `${topicProgress.done}/${topicProgress.total}`;
-    if (answerProgText) answerProgText.textContent = `${answerProgress.done}/${answerProgress.total}`;
+    topicProgText.textContent = `${topicProgress.done}/${topicProgress.total}`;
+    answerProgText.textContent = `${answerProgress.done}/${answerProgress.total}`;
     setHostUI();
   });
 
@@ -299,37 +389,59 @@ function connectAndJoin() {
 
   socket.on("topicProgress", ({ done, total }) => {
     topicProgress = { done, total };
-    if (topicProgText) topicProgText.textContent = `${done}/${total}`;
-    // 全員準備完了でホストの開始ボタンが有効に
+    topicProgText.textContent = `${done}/${total}`;
     if (isHost) startBtn.disabled = !(done === total && total > 0);
   });
 
   socket.on("answerProgress", ({ done, total }) => {
     answerProgress = { done, total };
-    if (answerProgText) answerProgText.textContent = `${done}/${total}`;
-    // 全員回答完了まで「次のお題へ」は無効
+    answerProgText.textContent = `${done}/${total}`;
     if (isHost) nextTopicBtn.disabled = !(done === total && total > 0);
   });
 
-  socket.on("gameStarted", () => {
+  socket.on("gameStarted", ({ mode }) => {
+    currentMode = mode || currentMode;
     startBtn.disabled = true;
     nextTopicBtn.classList.toggle("hidden", !isHost);
-    // 回答が揃うまで次へは押せない
     if (isHost) nextTopicBtn.disabled = true;
     renderWaitingNext();
   });
 
   socket.on("newTopic", (topic) => {
     currentTopic = topic;
-    // 新しいお題では回答進捗を0に戻すので、ホストの「次へ」は再び無効
+    myLikes = {}; // ラウンドごとにリセット（クライアント側のメモ）
     if (isHost) nextTopicBtn.disabled = true;
     renderAnswer(topic);
   });
 
-  socket.on("showAnswers", (answers) => {
+  // 発表：サーバーから回答一覧とモードが届く
+  socket.on("showAnswers", ({ answers, mode }) => {
     latestAnswers = answers.slice();
+    currentMode = mode;
     revealIndex = 0;
-    renderRevealOne();
+
+    if (currentMode === "all") {
+      renderRevealAll();
+    } else {
+      // 最初の人はスロット演出してから
+      renderRevealWithSlot(latestAnswers[revealIndex], null);
+    }
+  });
+
+  socket.on("likesUpdate", ({ counts }) => {
+    // counts: { index: numberLike }
+    Object.entries(counts || {}).forEach(([idx, c]) => {
+      const el = document.getElementById(`likeCount-${idx}`);
+      if (el) el.textContent = c;
+      if (Number(idx) === revealIndex) {
+        const one = document.getElementById("likeCount");
+        if (one) one.textContent = c;
+      }
+    });
+  });
+
+  socket.on("scoreUpdate", ({ scores }) => {
+    renderScores(scores);
   });
 
   socket.on("noMoreTopics", () => {
@@ -343,7 +455,6 @@ function connectAndJoin() {
 }
 
 /* ========== 起動 ========== */
-
 (function init() {
   const isRoom = !!roomId;
 
@@ -355,7 +466,6 @@ function connectAndJoin() {
     return;
   }
 
-  // 共有UI
   shareTools.classList.remove("hidden");
   roomInfoEl.textContent = `Room: ${roomId}`;
   const hostFlag = localStorage.getItem(`kokoro_host_${roomId}`);
@@ -365,11 +475,15 @@ function connectAndJoin() {
   // トップ（参加＆ルールへ）
   renderTop();
 
-  // ホスト操作ボタン
+  // ホスト操作
   startBtn.addEventListener("click", () => {
     socket.emit("startGame", { roomId });
   });
   nextTopicBtn.addEventListener("click", () => {
     socket.emit("nextTopic", { roomId });
+  });
+  revealModeSelect.addEventListener("change", (e) => {
+    const mode = e.target.value;
+    socket.emit("setRevealMode", { roomId, mode }); // サーバーに保存
   });
 })();
