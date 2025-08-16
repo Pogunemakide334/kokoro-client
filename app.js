@@ -350,7 +350,7 @@ function renderHostNextHint() {
       <p class="small">「次のお題へ」を押して続けましょう</p>
     </div>
   `;
-  if (isHost) nextTopicBtn.disabled = false; // ★追加：発表完了後も次へ押せる
+  if (isHost) nextTopicBtn.disabled = false; // 発表完了後も次へ押せる
 }
 
 /* ===== スコア表示 ===== */
@@ -393,23 +393,28 @@ function connectAndJoin() {
   socket.on("answerProgress", ({ done, total }) => {
     answerProgress = { done, total };
     answerProgText.textContent = `${done}/${total}`;
-    // 全員回答完了まで「次のお題へ」は無効（ラウンド中）
+    // ラウンド中は全員揃うまで「次のお題へ」は無効
     if (isHost) nextTopicBtn.disabled = !(done === total && total > 0);
   });
 
-  // ★変更点：開始直後から最初の出題のために「次のお題へ」を押せる
+  // ★開始直後に自動で1問目を出題（ホストのみ）
   socket.on("gameStarted", ({ mode }) => {
     currentMode = mode || currentMode;
     startBtn.disabled = true;
     nextTopicBtn.classList.toggle("hidden", !isHost);
-    if (isHost) nextTopicBtn.disabled = false; // ←ここを有効化
-    renderWaitingNext();
+
+    if (isHost) {
+      nextTopicBtn.disabled = false;              // 最初の出題のため有効化
+      setTimeout(() => socket.emit("nextTopic", { roomId }), 0); // 自動で1問目を出す
+    }
+
+    renderWaitingNext(); // 直後に newTopic が来て回答画面へ切り替わる
   });
 
   socket.on("newTopic", (topic) => {
     currentTopic = topic;
     myLikes = {}; // ラウンドごとにリセット
-    // 新しいお題が出たら、回答が揃うまで「次へ」は再び無効
+    // 新しいお題では回答が揃うまで「次へ」は無効
     if (isHost) nextTopicBtn.disabled = true;
     renderAnswer(topic);
   });
