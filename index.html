@@ -11,10 +11,11 @@
   <div class="app">
     <header>
       <h1>心を合わせて</h1>
-      <div id="roomInfo"></div>
+      <div id="roomInfo" class="room-info"></div>
+
       <div id="shareTools" class="share-tools hidden">
         <button id="copyLinkBtn">招待リンクをコピー</button>
-        <span id="copyStatus"></span>
+        <span id="copyStatus" class="small"></span>
       </div>
     </header>
 
@@ -27,14 +28,22 @@
         <h3>参加者</h3>
         <ul id="players"></ul>
       </div>
+
       <div class="panel">
         <h3>お題数</h3>
-        <div id="topicsCount">0</div>
+        <div id="topicsCount" class="big-num">0</div>
       </div>
+
+      <div class="panel">
+        <h3>進捗</h3>
+        <div class="small">お題入力完了: <span id="topicProgressText">0/0</span></div>
+        <div class="small">回答完了: <span id="answerProgressText">0/0</span></div>
+      </div>
+
       <div class="panel">
         <h3>ホスト操作</h3>
-        <button id="startBtn" class="host-only hidden">お題募集終了（ゲーム開始）</button>
-        <button id="nextTopicBtn" class="host-only hidden">次のお題へ</button>
+        <button id="startBtn" class="host-only hidden" disabled>お題募集終了（ゲーム開始）</button>
+        <button id="nextTopicBtn" class="host-only hidden" disabled>次のお題へ</button>
       </div>
     </aside>
   </div>
