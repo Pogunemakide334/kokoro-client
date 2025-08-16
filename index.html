@@ -42,4 +42,22 @@
         <h3>ホスト操作</h3>
         <div class="small">発表モード</div>
         <select id="revealModeSelect" class="host-only hidden">
-          <option value="sequentia
+          <option value="sequential">順番に1人ずつ</option>
+          <option value="all">全員同時</option>
+        </select>
+        <div style="height:8px"></div>
+        <button id="startBtn" class="host-only hidden" disabled>お題募集終了（ゲーム開始）</button>
+        <button id="nextTopicBtn" class="host-only hidden" disabled>次のお題へ</button>
+      </div>
+
+      <div class="panel">
+        <h3>スコア</h3>
+        <ul id="scoreboard" class="scoreboard"></ul>
+        <p class="small">👍が入ると自動で加点（1👍=+1点）</p>
+      </div>
+    </aside>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
