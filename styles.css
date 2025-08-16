@@ -74,6 +74,5 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 
   .topic-pill { margin: 6px 6px 0 0; }
 
-  /* 共有UIが窮屈なら折りたたむ */
-  .share-tools { display: none; }
+
 }
